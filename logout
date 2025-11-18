@@ -1,0 +1,442 @@
+class SessionManager {
+    constructor() {
+        this.sensitiveData = {
+            sipCredentials: null,
+            authTokens: new Map(),
+            callHistory: [],
+            userData: null,
+            encryptionKeys: new Map()
+        };
+        
+        this.isLoggedIn = false;
+        this.init();
+    }
+    
+    init() {
+        // Восстановление сессии из безопасного хранилища
+        this.restoreSession();
+    }
+    
+    async login(credentials) {
+        try {
+            // Аутентификация
+            const authResult = await this.authenticate(credentials);
+            
+            // Сохраняем данные в безопасном формате
+            this.sensitiveData.sipCredentials = this.secureEncode(credentials);
+            this.sensitiveData.authTokens.set('main', authResult.token);
+            this.sensitiveData.userData = authResult.user;
+            
+            this.isLoggedIn = true;
+            
+            // Сохраняем сессию
+            await this.saveSession();
+            
+            return true;
+        } catch (error) {
+            this.clearTemporaryData();
+            throw error;
+        }
+    }
+    
+    async logout() {
+        // 1. Завершаем все активные вызовы
+        await this.terminateAllCalls();
+        
+        // 2. Отправляем запрос на сервер о выходе (если нужно)
+        await this.notifyServerLogout();
+        
+        // 3. Полная очистка данных
+        this.comprehensiveCleanup();
+        
+        // 4. Очистка хранилищ
+        await this.clearStorage();
+        
+        // 5. Редирект или обновление UI
+        this.postLogoutActions();
+    }
+}
+class SessionManager {
+    // ... предыдущий код ...
+    
+    comprehensiveCleanup() {
+        console.log('Starting comprehensive cleanup...');
+        
+        // 1. Очистка SIP-данных
+        this.clearSIPData();
+        
+        // 2. Очистка аутентификационных данных
+        this.clearAuthData();
+        
+        // 3. Очистка пользовательских данных
+        this.clearUserData();
+        
+        // 4. Очистка временных данных
+        this.clearTemporaryData();
+        
+        // 5. Очистка DOM и событий
+        this.clearUIReferences();
+        
+        this.isLoggedIn = false;
+        
+        console.log('Cleanup completed');
+    }
+    
+    clearSIPData() {
+        if (this.sensitiveData.sipCredentials) {
+            if (this.sensitiveData.sipCredentials instanceof Uint8Array) {
+                this.sensitiveData.sipCredentials.fill(0);
+            }
+            this.sensitiveData.sipCredentials = null;
+        }
+        
+        // Очистка SIP-соединения
+        if (window.sipClient) {
+            window.sipClient.disconnect();
+            window.sipClient = null;
+        }
+    }
+    
+    clearAuthData() {
+        // Очистка токенов
+        this.sensitiveData.authTokens.forEach((token, key) => {
+            if (token instanceof Uint8Array) {
+                token.fill(0);
+            }
+        });
+        this.sensitiveData.authTokens.clear();
+        
+        // Очистка cookies
+        this.clearAuthCookies();
+    }
+    
+    clearUserData() {
+        if (this.sensitiveData.userData) {
+            // Рекурсивная очистка объектов пользователя
+            this.secureObjectCleanup(this.sensitiveData.userData);
+            this.sensitiveData.userData = null;
+        }
+        
+        // Очистка истории звонков
+        this.sensitiveData.callHistory.forEach(call => {
+            if (call.phoneNumber) {
+                call.phoneNumber = null;
+            }
+        });
+        this.sensitiveData.callHistory.length = 0;
+    }
+    
+    clearTemporaryData() {
+        // Очистка encryption keys
+        this.sensitiveData.encryptionKeys.forEach((key, id) => {
+            if (key instanceof CryptoKey) {
+                // В реальном приложении здесь была бы более сложная логика
+                console.log(`Clearing encryption key: ${id}`);
+            }
+        });
+        this.sensitiveData.encryptionKeys.clear();
+        
+        // Очистка глобальных переменных
+        this.cleanGlobalReferences();
+    }
+    
+    clearUIReferences() {
+        // Очистка данных из DOM
+        const sensitiveElements = document.querySelectorAll('[data-sensitive]');
+        sensitiveElements.forEach(el => {
+            el.textContent = '';
+            el.value = '';
+        });
+        
+        // Удаление обработчиков событий
+        this.removeEventListeners();
+    }
+}
+class SessionManager {
+    // ... предыдущий код ...
+    
+    async clearStorage() {
+        try {
+            // LocalStorage
+            this.clearLocalStorage();
+            
+            // SessionStorage
+            this.clearSessionStorage();
+            
+            // IndexedDB
+            await this.clearIndexedDB();
+            
+            // Cookies
+            this.clearAllCookies();
+            
+            // Cache Storage
+            await this.clearCacheStorage();
+            
+        } catch (error) {
+            console.error('Storage cleanup error:', error);
+        }
+    }
+    
+    clearLocalStorage() {
+        const sensitiveKeys = [
+            'sip_credentials',
+            'auth_token', 
+            'user_data',
+            'call_history',
+            'encryption_keys'
+        ];
+        
+        sensitiveKeys.forEach(key => {
+            try {
+                // Перезаписываем перед удалением
+                localStorage.setItem(key, '');
+                localStorage.removeItem(key);
+            } catch (e) {
+                console.warn(`Failed to clear ${key} from localStorage`);
+            }
+        });
+        
+        // Явная очистка всех связанных данных
+        Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('sip_') || key.startsWith('auth_')) {
+                localStorage.removeItem(key);
+            }
+        });
+    }
+    
+    clearSessionStorage() {
+        try {
+            sessionStorage.clear();
+        } catch (e) {
+            console.warn('Failed to clear sessionStorage');
+        }
+    }
+    
+    async clearIndexedDB() {
+        try {
+            const databases = await window.indexedDB.databases();
+            for (const db of databases) {
+                if (db.name) {
+                    window.indexedDB.deleteDatabase(db.name);
+                }
+            }
+        } catch (e) {
+            console.warn('IndexedDB cleanup not supported');
+        }
+    }
+    
+    clearAllCookies() {
+        const cookies = document.cookie.split(';');
+        const domain = window.location.hostname;
+        const path = '/';
+        
+        cookies.forEach(cookie => {
+            const cookieName = cookie.split('=')[0].trim();
+            this.deleteCookie(cookieName, domain, path);
+        });
+    }
+    
+    deleteCookie(name, domain, path) {
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${path}; domain=${domain}; SameSite=Strict`;
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=${path}; domain=.${domain}; SameSite=Strict`;
+    }
+    
+    async clearCacheStorage() {
+        try {
+            if ('caches' in window) {
+                const cacheNames = await caches.keys();
+                await Promise.all(
+                    cacheNames.map(name => caches.delete(name))
+                );
+            }
+        } catch (e) {
+            console.warn('Cache cleanup failed');
+        }
+    }
+}
+class SessionManager {
+    // ... предыдущий код ...
+    
+    async terminateAllCalls() {
+        // Завершаем активные SIP-звонки
+        if (window.activeCalls) {
+            window.activeCalls.forEach(call => {
+                try {
+                    call.hangup();
+                } catch (e) {
+                    console.warn('Error terminating call:', e);
+                }
+            });
+            window.activeCalls.clear();
+        }
+        
+        // Останавливаем медиа-потоки
+        this.stopMediaStreams();
+    }
+    
+    stopMediaStreams() {
+        // Останавливаем все аудио/видео потоки
+        const mediaElements = document.querySelectorAll('audio, video');
+        mediaElements.forEach(media => {
+            media.pause();
+            media.srcObject = null;
+        });
+        
+        // Останавливаем getUserMedia потоки
+        if (window.currentStream) {
+            window.currentStream.getTracks().forEach(track => track.stop());
+            window.currentStream = null;
+        }
+    }
+    
+    async notifyServerLogout() {
+        try {
+            const token = this.sensitiveData.authTokens.get('main');
+            if (token) {
+                await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+            }
+        } catch (error) {
+            console.warn('Server logout notification failed:', error);
+        }
+    }
+    
+    removeEventListeners() {
+        // Удаляем глобальные обработчики
+        window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+        window.removeEventListener('storage', this.storageEventHandler);
+        
+        // Очищаем интервалы и таймауты
+        this.clearIntervals();
+    }
+    
+    clearIntervals() {
+        // Очищаем все известные интервалы
+        if (window.autoRefreshInterval) {
+            clearInterval(window.autoRefreshInterval);
+            window.autoRefreshInterval = null;
+        }
+        
+        if (window.callStatusInterval) {
+            clearInterval(window.callStatusInterval);
+            window.callStatusInterval = null;
+        }
+    }
+    
+    postLogoutActions() {
+        // Редирект на страницу логина
+        window.location.href = '/login';
+        
+        // Или обновление UI
+        // this.updateUIForLoggedOutState();
+    }
+    
+    // Экстренный выход
+    emergencyLogout() {
+        console.warn('EMERGENCY LOGOUT TRIGGERED');
+        
+        // Максимально быстрая очистка без async операций
+        this.comprehensiveCleanup();
+        
+        // Немедленный редирект
+        window.location.replace('/login?emergency=1');
+    }
+}
+// Интеграция с основной SIP-звонилкой
+class SecureSIPClient {
+    constructor() {
+        this.sessionManager = new SessionManager();
+        this.setupLogoutHandlers();
+    }
+    
+    setupLogoutHandlers() {
+        // Обработчик кнопки выхода
+        document.getElementById('logoutButton').addEventListener('click', () => {
+            this.logout();
+        });
+        
+        // Автоматический выход при закрытии браузера (опционально)
+        window.addEventListener('beforeunload', () => {
+            if (this.sessionManager.isLoggedIn) {
+                this.sessionManager.emergencyLogout();
+            }
+        });
+        
+        // Выход при неактивности
+        this.setupInactivityLogout();
+    }
+    
+    async logout() {
+        // Показываем индикатор загрузки
+        this.showLogoutIndicator();
+        
+        try {
+            await this.sessionManager.logout();
+            this.showLogoutSuccess();
+        } catch (error) {
+            console.error('Logout error:', error);
+            this.showLogoutError();
+        }
+    }
+    
+    setupInactivityLogout() {
+        let inactivityTimer;
+        
+        const resetTimer = () => {
+            clearTimeout(inactivityTimer);
+            inactivityTimer = setTimeout(() => {
+                if (this.sessionManager.isLoggedIn) {
+                    console.log('Auto-logout due to inactivity');
+                    this.logout();
+                }
+            }, 30 * 60 * 1000); // 30 минут
+        };
+        
+        // Сбрасываем таймер при активности пользователя
+        ['mousedown', 'keypress', 'scroll', 'touchstart'].forEach(event => {
+            document.addEventListener(event, resetTimer, false);
+        });
+        
+        resetTimer();
+    }
+    
+    showLogoutIndicator() {
+        // Показываем индикатор загрузки
+        document.body.style.opacity = '0.7';
+        document.body.style.pointerEvents = 'none';
+    }
+    
+    showLogoutSuccess() {
+        // Показываем сообщение об успешном выходе
+        alert('Вы успешно вышли из системы');
+    }
+    
+    showLogoutError() {
+        // Показываем сообщение об ошибке
+        alert('Ошибка при выходе. Пожалуйста, попробуйте еще раз.');
+    }
+}
+// Инициализация
+const sipClient = new SecureSIPClient();
+
+// При загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    // Кнопка выхода
+    document.getElementById('logoutBtn').addEventListener('click', function(e) {
+        e.preventDefault();
+        sipClient.logout();
+    });
+    
+    // Экстренный выход по сочетанию клавиш (для отладки)
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.shiftKey && e.key === 'L') {
+            sipClient.sessionManager.emergencyLogout();
+        }
+    });
+});
