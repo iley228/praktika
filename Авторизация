@@ -1,0 +1,167 @@
+import socket
+import hashlib
+import random
+import time
+
+class SIPClient:
+    def __init__(self, server, port, username, password):
+        self.server = server
+        self.port = port
+        self.username = username
+        self.password = password
+        self.call_id = self.generate_call_id()
+        self.branch = self.generate_branch()
+        self.tag = self.generate_tag()
+        
+    def generate_call_id(self):
+        return ''.join(random.choices('0123456789abcdef', k=32))
+    
+    def generate_branch(self):
+        return 'z9hG4bK' + ''.join(random.choices('0123456789abcdef', k=16))
+    
+    def generate_tag(self):
+        return ''.join(random.choices('0123456789abcdef', k=16))
+    
+    def calculate_response(self, nonce, method="REGISTER"):
+        # Расчет MD5 хеша для авторизации
+        ha1 = hashlib.md5(f"{self.username}:{self.server}:{self.password}".encode()).hexdigest()
+        ha2 = hashlib.md5(f"{method}:sip:{self.server}".encode()).hexdigest()
+        response = hashlib.md5(f"{ha1}:{nonce}:{ha2}".encode()).hexdigest()
+        return response
+    
+    def create_register_request(self, nonce=None, response=None):
+        request = f"REGISTER sip:{self.server} SIP/2.0\r\n"
+        request += f"Via: SIP/2.0/UDP {self.get_local_ip()}:5060;branch={self.branch}\r\n"
+        request += f"Max-Forwards: 70\r\n"
+        request += f"From: <sip:{self.username}@{self.server}>;tag={self.tag}\r\n"
+        request += f"To: <sip:{self.username}@{self.server}>\r\n"
+        request += f"Call-ID: {self.call_id}\r\n"
+        request += f"CSeq: 1 REGISTER\r\n"
+        request += f"Contact: <sip:{self.username}@{self.get_local_ip()}:5060>\r\n"
+        request += f"Expires: 3600\r\n"
+        request += f"User-Agent: PythonSIPClient/1.0\r\n"
+        
+        if nonce and response:
+            request += f'Authorization: Digest username="{self.username}", realm="{self.server}", nonce="{nonce}", uri="sip:{self.server}", response="{response}"\r\n'
+        
+        request += f"Content-Length: 0\r\n\r\n"
+        return request
+    
+    def get_local_ip(self):
+        # Получаем локальный IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(('8.8.8.8', 80))
+            return s.getsockname()[0]
+        except:
+            return "127.0.0.1"
+        finally:
+            s.close()
+    
+    def parse_sip_response(self, response):
+        lines = response.split('\r\n')
+        status_line = lines[0]
+        headers = {}
+        
+        for line in lines[1:]:
+            if ': ' in line:
+                key, value = line.split(': ', 1)
+                headers[key.lower()] = value
+        
+        return status_line, headers
+    
+    def extract_nonce(self, auth_header):
+        # Извлекаем nonce из заголовка авторизации
+        params = auth_header.split(', ')
+        for param in params:
+            if param.startswith('nonce='):
+                return param.split('=')[1].strip('"')
+        return None
+    
+    def register(self):
+        try:
+            # Создаем UDP сокет
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.settimeout(10)
+            
+            # Первый запрос без авторизации
+            request = self.create_register_request()
+            print("Отправляем REGISTER запрос:")
+            print(request)
+            
+            sock.sendto(request.encode(), (self.server, self.port))
+            
+            # Получаем ответ
+            response, addr = sock.recvfrom(4096)
+            response_text = response.decode()
+            print("Получен ответ:")
+            print(response_text)
+            
+            status_line, headers = self.parse_sip_response(response_text)
+            
+            # Проверяем статус ответа
+            if '401' in status_line and 'www-authenticate' in headers:
+                # Получаем nonce из заголовка аутентификации
+                auth_header = headers['www-authenticate']
+                nonce = self.extract_nonce(auth_header)
+                
+                if nonce:
+                    print(f"Получен nonce: {nonce}")
+                    
+                    # Рассчитываем response для авторизации
+                    response_hash = self.calculate_response(nonce)
+                    
+                    # Отправляем запрос с авторизацией
+                    auth_request = self.create_register_request(nonce, response_hash)
+                    print("Отправляем REGISTER с авторизацией:")
+                    print(auth_request)
+                    
+                    sock.sendto(auth_request.encode(), (self.server, self.port))
+                    
+                    # Получаем финальный ответ
+                    final_response, addr = sock.recvfrom(4096)
+                    final_response_text = final_response.decode()
+                    print("Финальный ответ:")
+                    print(final_response_text)
+                    
+                    if '200' in final_response_text:
+                        print("Успешная регистрация!")
+                        return True
+                    else:
+                        print("Ошибка регистрации")
+                        return False
+                else:
+                    print("Не удалось извлечь nonce")
+                    return False
+            elif '200' in status_line:
+                print("Успешная регистрация (без аутентификации)")
+                return True
+            else:
+                print(f"Неожиданный ответ: {status_line}")
+                return False
+                
+        except socket.timeout:
+            print("Таймаут соединения")
+            return False
+        except Exception as e:
+            print(f"Ошибка: {e}")
+            return False
+        finally:
+            sock.close()
+
+# Пример использования
+if __name__ == "__main__":
+    # Настройки SIP-аккаун
+    SIP_SERVER = "your.sip.server.com"  
+    SIP_PORT = 5060
+    USERNAME = "
+    PASSWORD = "your_password"          
+
+    
+    # Создаем и регистрируем клиент
+    client = SIPClient(SIP_SERVER, SIP_PORT, USERNAME, PASSWORD)
+    
+    if client.register():
+        print("SIP клиент успешно зарегистрирован")
+    else:
+        print("Ошибка регистрации SIP клиента")
