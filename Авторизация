@@ -1,167 +1,284 @@
-import socket
-import hashlib
-import random
-import time
+import sys
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+                             QHBoxLayout, QLabel, QLineEdit, QPushButton, 
+                             QCheckBox, QMessageBox, QGroupBox, QFormLayout)
+from PyQt5.QtCore import Qt, QSettings
+from PyQt5.QtGui import QIcon, QFont
+import logging
 
-class SIPClient:
-    def __init__(self, server, port, username, password):
-        self.server = server
-        self.port = port
-        self.username = username
-        self.password = password
-        self.call_id = self.generate_call_id()
-        self.branch = self.generate_branch()
-        self.tag = self.generate_tag()
+class SIPLoginWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.settings = QSettings("YourCompany", "SIPClient")
+        self.initUI()
+        self.load_settings()
         
-    def generate_call_id(self):
-        return ''.join(random.choices('0123456789abcdef', k=32))
-    
-    def generate_branch(self):
-        return 'z9hG4bK' + ''.join(random.choices('0123456789abcdef', k=16))
-    
-    def generate_tag(self):
-        return ''.join(random.choices('0123456789abcdef', k=16))
-    
-    def calculate_response(self, nonce, method="REGISTER"):
-        # Расчет MD5 хеша для авторизации
-        ha1 = hashlib.md5(f"{self.username}:{self.server}:{self.password}".encode()).hexdigest()
-        ha2 = hashlib.md5(f"{method}:sip:{self.server}".encode()).hexdigest()
-        response = hashlib.md5(f"{ha1}:{nonce}:{ha2}".encode()).hexdigest()
-        return response
-    
-    def create_register_request(self, nonce=None, response=None):
-        request = f"REGISTER sip:{self.server} SIP/2.0\r\n"
-        request += f"Via: SIP/2.0/UDP {self.get_local_ip()}:5060;branch={self.branch}\r\n"
-        request += f"Max-Forwards: 70\r\n"
-        request += f"From: <sip:{self.username}@{self.server}>;tag={self.tag}\r\n"
-        request += f"To: <sip:{self.username}@{self.server}>\r\n"
-        request += f"Call-ID: {self.call_id}\r\n"
-        request += f"CSeq: 1 REGISTER\r\n"
-        request += f"Contact: <sip:{self.username}@{self.get_local_ip()}:5060>\r\n"
-        request += f"Expires: 3600\r\n"
-        request += f"User-Agent: PythonSIPClient/1.0\r\n"
+    def initUI(self):
+  
+        self.setWindowTitle('SIP Звонилка - Авторизация')
+        self.setGeometry(300, 300, 400, 350)
+        self.setWindowIcon(QIcon.fromTheme('phone'))
         
-        if nonce and response:
-            request += f'Authorization: Digest username="{self.username}", realm="{self.server}", nonce="{nonce}", uri="sip:{self.server}", response="{response}"\r\n'
         
-        request += f"Content-Length: 0\r\n\r\n"
-        return request
-    
-    def get_local_ip(self):
-        # Получаем локальный IP
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            s.connect(('8.8.8.8', 80))
-            return s.getsockname()[0]
-        except:
-            return "127.0.0.1"
-        finally:
-            s.close()
-    
-    def parse_sip_response(self, response):
-        lines = response.split('\r\n')
-        status_line = lines[0]
-        headers = {}
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
         
-        for line in lines[1:]:
-            if ': ' in line:
-                key, value = line.split(': ', 1)
-                headers[key.lower()] = value
+   
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setSpacing(15)
+    
+        title_label = QLabel('SIP Звонилка')
+        title_font = QFont()
+        title_font.setPointSize(18)
+        title_font.setBold(True)
+        title_label.setFont(title_font)
+        title_label.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(title_label)
         
-        return status_line, headers
-    
-    def extract_nonce(self, auth_header):
-        # Извлекаем nonce из заголовка авторизации
-        params = auth_header.split(', ')
-        for param in params:
-            if param.startswith('nonce='):
-                return param.split('=')[1].strip('"')
-        return None
-    
-    def register(self):
-        try:
-            # Создаем UDP сокет
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.settimeout(10)
+ 
+        server_group = QGroupBox("Настройки сервера")
+        server_layout = QFormLayout()
+        
+        self.server_input = QLineEdit()
+        self.server_input.setPlaceholderText("sip.example.com или IP-адрес")
+        server_layout.addRow("Сервер SIP:", self.server_input)
+        
+        self.port_input = QLineEdit()
+        self.port_input.setPlaceholderText("5060")
+        self.port_input.setMaxLength(5)
+        server_layout.addRow("Порт:", self.port_input)
+        
+        self.transport_combo = QLineEdit()
+        self.transport_combo.setPlaceholderText("udp или tcp")
+        server_layout.addRow("Транспорт:", self.transport_combo)
+        
+        server_group.setLayout(server_layout)
+        main_layout.addWidget(server_group)
+   
+        auth_group = QGroupBox("Учетные данные")
+        auth_layout = QFormLayout()
+        
+        self.username_input = QLineEdit()
+        self.username_input.setPlaceholderText("101")
+        auth_layout.addRow("Имя пользователя:", self.username_input)
+        
+        self.password_input = QLineEdit()
+        self.password_input.setPlaceholderText("пароль")
+        self.password_input.setEchoMode(QLineEdit.Password)
+        auth_layout.addRow("Пароль:", self.password_input)
+        
+        auth_group.setLayout(auth_layout)
+        main_layout.addWidget(auth_group)
+        
+      
+        self.save_checkbox = QCheckBox("Сохранить настройки")
+        self.save_checkbox.setChecked(True)
+        main_layout.addWidget(self.save_checkbox)
+        
+        self.auto_login_checkbox = QCheckBox("Автоматический вход при запуске")
+        main_layout.addWidget(self.auto_login_checkbox)
+      
+        buttons_layout = QHBoxLayout()
+        
+        self.login_button = QPushButton("Войти")
+        self.login_button.setDefault(True)
+        self.login_button.clicked.connect(self.on_login)
+        self.login_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                font-weight: bold;
+                padding: 8px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        
+        self.exit_button = QPushButton("Выход")
+        self.exit_button.clicked.connect(self.close)
+        self.exit_button.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                font-weight: bold;
+                padding: 8px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #da190b;
+            }
+        """)
+        
+        buttons_layout.addWidget(self.login_button)
+        buttons_layout.addWidget(self.exit_button)
+        main_layout.addLayout(buttons_layout)
+        
+   
+        self.status_label = QLabel("Готов к подключению")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setStyleSheet("color: #666; font-style: italic;")
+        main_layout.addWidget(self.status_label)
+        
+      
+        self.password_input.returnPressed.connect(self.on_login)
+        
+    def load_settings(self):
+     
+        self.server_input.setText(self.settings.value("server", ""))
+        self.port_input.setText(self.settings.value("port", "5060"))
+        self.transport_combo.setText(self.settings.value("transport", "udp"))
+        self.username_input.setText(self.settings.value("username", ""))
+        
+      
+        password = self.settings.value("password", "")
+        if password:
+            self.password_input.setText(password)
+        
+        self.save_checkbox.setChecked(self.settings.value("save_settings", True, type=bool))
+        self.auto_login_checkbox.setChecked(self.settings.value("auto_login", False, type=bool))
+        
+    def save_settings(self):
+        
+        if self.save_checkbox.isChecked():
+            self.settings.setValue("server", self.server_input.text())
+            self.settings.setValue("port", self.port_input.text())
+            self.settings.setValue("transport", self.transport_combo.text())
+            self.settings.setValue("username", self.username_input.text())
             
-            # Первый запрос без авторизации
-            request = self.create_register_request()
-            print("Отправляем REGISTER запрос:")
-            print(request)
+         
+            self.settings.setValue("password", self.password_input.text())
             
-            sock.sendto(request.encode(), (self.server, self.port))
+            self.settings.setValue("save_settings", self.save_checkbox.isChecked())
+            self.settings.setValue("auto_login", self.auto_login_checkbox.isChecked())
+        else:
+       
+            self.settings.clear()
             
-            # Получаем ответ
-            response, addr = sock.recvfrom(4096)
-            response_text = response.decode()
-            print("Получен ответ:")
-            print(response_text)
+    def validate_input(self):
+      
+        errors = []
+        
+        if not self.server_input.text().strip():
+            errors.append("Укажите SIP сервер")
             
-            status_line, headers = self.parse_sip_response(response_text)
+        if not self.username_input.text().strip():
+            errors.append("Укажите имя пользователя")
             
-            # Проверяем статус ответа
-            if '401' in status_line and 'www-authenticate' in headers:
-                # Получаем nonce из заголовка аутентификации
-                auth_header = headers['www-authenticate']
-                nonce = self.extract_nonce(auth_header)
+        if not self.password_input.text():
+            errors.append("Введите пароль")
+            
+        port = self.port_input.text().strip()
+        if port:
+            try:
+                port_num = int(port)
+                if not (1 <= port_num <= 65535):
+                    errors.append("Порт должен быть в диапазоне 1-65535")
+            except ValueError:
+                errors.append("Порт должен быть числом")
                 
-                if nonce:
-                    print(f"Получен nonce: {nonce}")
-                    
-                    # Рассчитываем response для авторизации
-                    response_hash = self.calculate_response(nonce)
-                    
-                    # Отправляем запрос с авторизацией
-                    auth_request = self.create_register_request(nonce, response_hash)
-                    print("Отправляем REGISTER с авторизацией:")
-                    print(auth_request)
-                    
-                    sock.sendto(auth_request.encode(), (self.server, self.port))
-                    
-                    # Получаем финальный ответ
-                    final_response, addr = sock.recvfrom(4096)
-                    final_response_text = final_response.decode()
-                    print("Финальный ответ:")
-                    print(final_response_text)
-                    
-                    if '200' in final_response_text:
-                        print("Успешная регистрация!")
-                        return True
-                    else:
-                        print("Ошибка регистрации")
-                        return False
-                else:
-                    print("Не удалось извлечь nonce")
-                    return False
-            elif '200' in status_line:
-                print("Успешная регистрация (без аутентификации)")
-                return True
-            else:
-                print(f"Неожиданный ответ: {status_line}")
-                return False
-                
-        except socket.timeout:
-            print("Таймаут соединения")
-            return False
-        except Exception as e:
-            print(f"Ошибка: {e}")
-            return False
-        finally:
-            sock.close()
-
-# Пример использования
-if __name__ == "__main__":
-    # Настройки SIP-аккаун
-    SIP_SERVER = "your.sip.server.com"  
-    SIP_PORT = 5060
-    USERNAME = "
-    PASSWORD = "your_password"          
-
+        transport = self.transport_combo.text().strip().lower()
+        if transport and transport not in ['udp', 'tcp']:
+            errors.append("Транспорт должен быть 'udp' или 'tcp'")
+            
+        return errors
     
-    # Создаем и регистрируем клиент
-    client = SIPClient(SIP_SERVER, SIP_PORT, USERNAME, PASSWORD)
+    def on_login(self):
+        """Обработка нажатия кнопки входа"""
+        # Проверяем введенные данные
+        errors = self.validate_input()
+        
+        if errors:
+            QMessageBox.warning(self, "Ошибка ввода", "\n".join(errors))
+            return
+            
+      
+        self.save_settings()
+        
+       
+        sip_data = {
+            'server': self.server_input.text().strip(),
+            'port': self.port_input.text().strip() or "5060",
+            'transport': self.transport_combo.text().strip().lower() or "udp",
+            'username': self.username_input.text().strip(),
+            'password': self.password_input.text()
+        }
+        
+     
+        self.status_label.setText("Подключаемся к серверу...")
+        self.status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
+        
+       
+        # Например: self.sip_client.connect(**sip_data)
+        
     
-    if client.register():
-        print("SIP клиент успешно зарегистрирован")
-    else:
-        print("Ошибка регистрации SIP клиента")
+        QMessageBox.information(
+            self, 
+            "Успешно", 
+            f"Подключение установлено:\n"
+            f"Сервер: {sip_data['server']}:{sip_data['port']}\n"
+            f"Пользователь: {sip_data['username']}"
+        )
+        
+      
+        # self.main_window = MainWindow(sip_data)
+        # self.main_window.show()
+        # self.hide()
+        
+    def closeEvent(self, event):
+        """Обработка закрытия окна"""
+        reply = QMessageBox.question(
+            self, 
+            'Подтверждение', 
+            'Вы уверены, что хотите выйти?',
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            event.accept()
+        else:
+            event.ignore()
+
+def main():
+    app = QApplication(sys.argv)
+    app.setStyle('Fusion')  # Современный стиль
+    
+  
+    app.setStyleSheet("""
+        QMainWindow {
+            background-color: #f5f5f5;
+        }
+        QGroupBox {
+            font-weight: bold;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-top: 10px;
+            padding-top: 10px;
+        }
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 10px;
+            padding: 0 5px 0 5px;
+        }
+        QLineEdit {
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+        QLineEdit:focus {
+            border: 1px solid #4CAF50;
+        }
+        QLabel {
+            color: #333;
+        }
+    """)
+    
+    window = SIPLoginWindow()
+    window.show()
+    
+    sys.exit(app.exec_())
+
+if __name__ == '__main__':
+    main()
